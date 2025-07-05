@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业微信表格转JSON工具</title>
+    <script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
+    <style>
+        body {
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+        }
+        h1 {
+            color: #1a1a1a;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .card {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #1e88e5;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #1976d2;
+        }
+        .btn:disabled {
+            background: #90caf9;
+            cursor: not-allowed;
+        }
+        .result-area {
+            margin-top: 25px;
+            display: none;
+        }
+        textarea {
+            width: 100%;
+            height: 250px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        .file-info {
+            margin: 15px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>企业微信表格转JSON工具</h1>
+        
+        <div class="card">
+            <p>请从企业微信文档中选择Excel文件进行转换：</p>
+            <button id="selectFileBtn" class="btn">选择Excel文件</button>
+            <div id="fileInfo" class="file-info"></div>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>正在处理文件，请稍候...</p>
+        </div>
+        
+        <div id="resultArea" class="result-area">
+            <h3>转换结果：</h3>
+            <textarea id="jsonOutput" readonly></textarea>
+            <button id="copyBtn" class="btn" style="margin-top: 15px;">复制JSON数据</button>
+        </div>
+    </div>
+
+    <script>
+        // 企业微信配置信息
+        const corpId = 'YOUR_CORP_ID'; // 替换为你的企业ID
+        const agentId = 'YOUR_AGENT_ID'; // 替换为你的应用AgentId
+        
+        document.getElementById('selectFileBtn').addEventListener('click', selectFile);
+        document.getElementById('copyBtn').addEventListener('click', copyToClipboard);
+        
+        // 初始化企业微信JS-SDK
+        wx.config({
+            beta: true, // 必须设置为true
+            debug: false, 
+            appId: corpId, 
+            timestamp: '', // 实际使用时需动态生成
+            nonceStr: '', // 实际使用时需动态生成
+            signature: '', // 实际使用时需动态生成
+            jsApiList: ['chooseWXFile'] 
+        });
+        
+        wx.ready(function() {
+            console.log('企业微信JS-SDK已准备就绪');
+        });
+        
+        wx.error(function(res) {
+            console.error('企业微信JS-SDK初始化失败:', res);
+            alert('企业微信JS-SDK初始化失败，请重试');
+        });
+        
+        // 选择文件
+        function selectFile() {
+            document.getElementById('loading').style.display = 'block';
+            
+            wx.chooseWXFile({
+                count: 1,
+                type: 'file',
+                extension: ['xlsx', 'xls'],
+                success: function(res) {
+                    const file = res.tempFiles[0];
+                    document.getElementById('fileInfo').innerHTML = `
+                        <strong>已选择文件:</strong> ${file.fileName}<br>
+                        <strong>文件大小:</strong> ${(file.fileSize / 1024).toFixed(2)} KB
+                    `;
+                    
+                    // 上传文件到后端处理
+                    uploadFile(file);
+                },
+                fail: function(res) {
+                    document.getElementById('loading').style.display = 'none';
+                    console.error('文件选择失败:', res);
+                    alert('文件选择失败: ' + (res.errMsg || '未知错误'));
+                }
+            });
+        }
+        
+        // 上传文件到后端
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', new Blob([file]), file.fileName);
+            
+            fetch('/convert', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                if (data.success) {
+                    document.getElementById('jsonOutput').value = JSON.stringify(data.result, null, 2);
+                    document.getElementById('resultArea').style.display = 'block';
+                } else {
+                    alert('转换失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                document.getElementById('loading').style.display = 'none';
+                console.error('请求失败:', error);
+                alert('请求失败: ' + error.message);
+            });
+        }
+        
+        // 复制到剪贴板
+        function copyToClipboard() {
+            const jsonOutput = document.getElementById('jsonOutput');
+            jsonOutput.select();
+            document.execCommand('copy');
+            alert('JSON数据已复制到剪贴板！');
+        }
+    </script>
+</body>
+</html>
